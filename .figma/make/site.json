@@ -1,0 +1,10 @@
+{
+  "description": "Centralizes and organizes academic resources for Cavendish University Zambia, enabling students and lecturers to access, submit, and manage educational materials efficiently.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

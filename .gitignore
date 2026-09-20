@@ -1,0 +1,40 @@
+# ===================
+# Frontend (React)
+# ===================
+node_modules/
+dist/
+build/
+.cache/
+.env*
+.vite/
+vite.config.*.timestamp-*
+*.tsbuildinfo
+*-debug.log*
+logs/
+*.log
+.claude-replay.*
+.tmp-*
+
+# ===================
+# Backend (Django)
+# ===================
+core_backend/venv/
+core_backend/env/
+core_backend/__pycache__/
+core_backend/**/__pycache__/
+core_backend/**/*.pyc
+core_backend/db.sqlite3
+core_backend/media/
+core_backend/staticfiles/
+core_backend/.env
+core_backend/.env.*
+core_backend/logs/
+
+# ===================
+# IDE & OS
+# ===================
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
