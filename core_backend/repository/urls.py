@@ -9,6 +9,10 @@ urlpatterns = [
     path('api/programs/', views.get_programs, name='api_programs'),
     path('api/courses/', views.get_courses, name='api_courses'),
     path('api/resources/', views.get_resources, name='api_resources'),
+
+    # Specific resource endpoints MUST come before the generic <int:id> route
+    path('api/resources/create/', views.create_resource, name='api_resource_create'),
+    path('api/resources/my-submissions/', views.my_submissions, name='api_my_submissions'),
     path('api/resources/<int:resource_id>/', views.get_resource_detail, name='api_resource_detail'),
 
     # ============================================================
@@ -20,8 +24,9 @@ urlpatterns = [
     path('api/auth/me/', views.me_view, name='api_me'),
 
     # ============================================================
-    # RESOURCE UPLOAD ENDPOINTS (Authenticated)
+    # LECTURER ENDPOINTS
     # ============================================================
-    path('api/resources/create/', views.create_resource, name='api_resource_create'),
-    path('api/resources/my-submissions/', views.my_submissions, name='api_my_submissions'),
+    path('api/lecturer/modules/', views.lecturer_modules, name='api_lecturer_modules'),
+    path('api/lecturer/pending-submissions/', views.lecturer_pending_submissions, name='api_lecturer_pending'),
+    path('api/lecturer/decide/<int:resource_id>/', views.lecturer_decide_submission, name='api_lecturer_decide'),
 ]

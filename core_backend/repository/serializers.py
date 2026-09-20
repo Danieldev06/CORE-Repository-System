@@ -53,6 +53,13 @@ class RegisterSerializer(serializers.Serializer):
     role = serializers.CharField(max_length=20)
     password = serializers.CharField(write_only=True, min_length=8)
 
+    # ✅ NEW: Lecturer's selected modules (list of Course IDs)
+    module_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=False,
+        allow_empty=True,
+    )
+
     def validate_email(self, value):
         valid_domains = [
             '@cavendish.ac.zm',
@@ -80,8 +87,47 @@ class RegisterSerializer(serializers.Serializer):
             )
         return value
 
+    def validate(self, attrs):
+        """
+        Cross-field validation:
+        - Lecturers must select at least one module.
+        - Module IDs must exist and belong to the lecturer's program.
+        """
+        role = attrs.get('role')
+        module_ids = attrs.get('module_ids') or []
+        program_code = attrs.get('program')
+
+        if role == 'lecturer':
+            if not program_code:
+                raise serializers.ValidationError(
+                    {'program': 'Lecturers must select a programme they teach.'}
+                )
+            if not module_ids:
+                raise serializers.ValidationError(
+                    {'module_ids': 'Please select at least one module you teach.'}
+                )
+
+            # Verify modules exist
+            courses = Course.objects.filter(id__in=module_ids)
+            if courses.count() != len(set(module_ids)):
+                raise serializers.ValidationError(
+                    {'module_ids': 'One or more selected modules do not exist.'}
+                )
+
+            # Verify all modules belong to the lecturer's program
+            program = Program.objects.filter(code=program_code).first()
+            if program:
+                invalid = courses.exclude(program=program)
+                if invalid.exists():
+                    raise serializers.ValidationError(
+                        {'module_ids': 'All selected modules must belong to your programme.'}
+                    )
+
+        return attrs
+
     def create(self, validated_data):
         role = validated_data['role']
+        module_ids = validated_data.pop('module_ids', []) or []
 
         # Create the user
         user = User.objects.create_user(
@@ -106,7 +152,7 @@ class RegisterSerializer(serializers.Serializer):
             program = Program.objects.filter(code=validated_data['program']).first()
 
         # Create the profile
-        StudentProfile.objects.create(
+        profile = StudentProfile.objects.create(
             user=user,
             student_id=validated_data['student_id'],
             role=role,
@@ -114,6 +160,11 @@ class RegisterSerializer(serializers.Serializer):
             program=program,
             current_year=int(validated_data.get('year') or 1),
         )
+
+        # ✅ Attach taught modules if lecturer
+        if role == 'lecturer' and module_ids:
+            modules = Course.objects.filter(id__in=module_ids)
+            profile.taught_modules.set(modules)
 
         # Create auth token
         Token.objects.create(user=user)
@@ -131,16 +182,17 @@ class UserProfileSerializer(serializers.ModelSerializer):
     program = serializers.SerializerMethodField()
     year = serializers.SerializerMethodField()
     student_id = serializers.SerializerMethodField()
+    taught_modules = serializers.SerializerMethodField()   # ✅ NEW
 
     class Meta:
         model = User
         fields = [
             'id', 'username', 'email', 'first_name', 'last_name',
             'role', 'faculty', 'program', 'year', 'student_id',
+            'taught_modules',   # ✅ NEW
         ]
 
     def get_role(self, obj):
-        """Return the role stored on the profile."""
         try:
             return obj.profile.role
         except Exception:
@@ -169,3 +221,37 @@ class UserProfileSerializer(serializers.ModelSerializer):
             return obj.profile.student_id
         except Exception:
             return ''
+
+    def get_taught_modules(self, obj):
+        """Return list of modules the lecturer teaches."""
+        try:
+            return list(
+                obj.profile.taught_modules.values('id', 'code', 'name')
+            )
+        except Exception:
+            return []
+
+
+# ============================================================
+# LECTURER MODULE MANAGEMENT
+# ============================================================
+
+class LecturerModulesSerializer(serializers.Serializer):
+    """Used by lecturers to update their taught modules after signup."""
+    module_ids = serializers.ListField(
+        child=serializers.IntegerField(),
+        required=True,
+        allow_empty=True,
+    )
+
+    def validate_module_ids(self, value):
+        if not value:
+            raise serializers.ValidationError(
+                'Please select at least one module.'
+            )
+        courses = Course.objects.filter(id__in=value)
+        if courses.count() != len(set(value)):
+            raise serializers.ValidationError(
+                'One or more selected modules do not exist.'
+            )
+        return value

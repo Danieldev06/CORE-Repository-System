@@ -126,7 +126,7 @@ class Resource(models.Model):
 
 
 # ============================================================
-# STUDENT PROFILE MODEL (with role)
+# STUDENT PROFILE MODEL (with role + taught modules)
 # ============================================================
 class StudentProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
@@ -136,10 +136,24 @@ class StudentProfile(models.Model):
         choices=ROLE_CHOICES,
         default='student',
     )
-    department = models.ForeignKey(Department, on_delete=models.SET_NULL, null=True, blank=True)
-    program = models.ForeignKey(Program, on_delete=models.SET_NULL, null=True, blank=True, related_name='students')
+
+    # Academic affiliation (used by both students and lecturers)
+    department = models.ForeignKey(
+        Department, on_delete=models.SET_NULL, null=True, blank=True
+    )
+    program = models.ForeignKey(
+        Program, on_delete=models.SET_NULL, null=True, blank=True, related_name='students'
+    )
     current_year = models.IntegerField(choices=YEAR_CHOICES, default=1)
     phone_number = models.CharField(max_length=15, blank=True)
+
+    # ✅ NEW: Modules a lecturer teaches (only relevant when role='lecturer')
+    taught_modules = models.ManyToManyField(
+        Course,
+        blank=True,
+        related_name='lecturers',
+        help_text="Modules this lecturer teaches. Only used when role is 'lecturer'.",
+    )
 
     def __str__(self):
         return f"{self.user.username} - {self.student_id} ({self.get_role_display()})"
@@ -149,3 +163,20 @@ class StudentProfile(models.Model):
 
     def get_program_name(self):
         return self.program.name if self.program else "No Program Assigned"
+
+    # ------------------------------------------------------------
+    # Helper methods for filtering
+    # ------------------------------------------------------------
+
+    def get_taught_course_ids(self):
+        """Return a list of Course IDs the lecturer teaches."""
+        return list(self.taught_modules.values_list('id', flat=True))
+
+    def is_lecturer(self):
+        return self.role == 'lecturer'
+
+    def is_student(self):
+        return self.role == 'student'
+
+    def is_admin(self):
+        return self.role == 'admin'

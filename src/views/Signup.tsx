@@ -1,8 +1,8 @@
 // src/views/Signup.tsx
-import { useState } from 'react';
-import { Eye, EyeOff, Shield, BookOpen, GraduationCap, Users, UserPlus, CheckCircle } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Eye, EyeOff, Shield, BookOpen, GraduationCap, Users, UserPlus, CheckCircle, Loader2 } from 'lucide-react';
 import { useApp } from '../context';
-import { authApi } from '../services/api';
+import { authApi, api, extractApiError, type Course, type Program } from '../services/api';
 import type { User } from '../types';
 
 const FEATURE_BULLETS = [
@@ -68,20 +68,59 @@ export default function Signup() {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
 
+  // ✅ NEW: Programs list + lecturer modules
+  const [allPrograms, setAllPrograms] = useState<Program[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<Course[]>([]);
+  const [selectedModuleIds, setSelectedModuleIds] = useState<number[]>([]);
+  const [loadingModules, setLoadingModules] = useState(false);
+
+  // Fetch all programs on mount (for mapping program code → ID)
+  useEffect(() => {
+    api.getPrograms().then(setAllPrograms).catch(console.error);
+  }, []);
+
+  // ✅ When lecturer selects faculty + program, fetch matching courses
+  useEffect(() => {
+    if (formData.role !== 'lecturer' || !formData.program) {
+      setAvailableCourses([]);
+      setSelectedModuleIds([]);
+      return;
+    }
+
+    const programObj = allPrograms.find((p) => p.code === formData.program);
+    if (!programObj) return;
+
+    setLoadingModules(true);
+    api
+      .getCourses(programObj.id)
+      .then(setAvailableCourses)
+      .catch(console.error)
+      .finally(() => setLoadingModules(false));
+  }, [formData.role, formData.program, allPrograms]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
     if (name === 'faculty') {
-      setFormData(prev => ({ ...prev, program: '' }));
+      setFormData((prev) => ({ ...prev, program: '' }));
     }
     if (name === 'role') {
-      setFormData(prev => ({
+      setFormData((prev) => ({
         ...prev,
         program: '',
         year: '',
         faculty: '',
       }));
+      setSelectedModuleIds([]);
     }
+  };
+
+  const toggleModule = (courseId: number) => {
+    setSelectedModuleIds((prev) =>
+      prev.includes(courseId)
+        ? prev.filter((id) => id !== courseId)
+        : [...prev, courseId]
+    );
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -89,7 +128,9 @@ export default function Signup() {
     setError('');
     setSuccess(false);
 
-    const { firstName, lastName, email, studentId, faculty, program, year, role, password, confirmPassword } = formData;
+    const {
+      firstName, lastName, email, studentId, faculty, program, year, role, password, confirmPassword,
+    } = formData;
 
     if (!firstName || !lastName || !email || !studentId || !password || !role) {
       setError('Please fill in all required fields.');
@@ -103,8 +144,12 @@ export default function Signup() {
         return;
       }
     } else if (role === 'lecturer') {
-      if (!faculty) {
-        setError('Lecturers must select a Faculty/School.');
+      if (!faculty || !program) {
+        setError('Lecturers must select Faculty and Programme.');
+        return;
+      }
+      if (selectedModuleIds.length === 0) {
+        setError('Please select at least one module you teach.');
         return;
       }
     }
@@ -124,7 +169,6 @@ export default function Signup() {
       return;
     }
 
-    // ✅ Updated email validation — accepts all Cavendish domains
     const isValidEmail =
       email.endsWith('@cavendish.ac.zm') ||
       email.endsWith('@students.cavendish.ac.zm') ||
@@ -139,20 +183,19 @@ export default function Signup() {
     setLoading(true);
 
     try {
-      // ✅ Call Django backend to register
       const response = await authApi.register({
         first_name: firstName,
         last_name: lastName,
-        email: email,
+        email,
         student_id: studentId,
         faculty: faculty || '',
         program: program || '',
-        year: year || '',
-        role: role,
-        password: password,
+        year: year || '1',
+        role,
+        password,
+        module_ids: role === 'lecturer' ? selectedModuleIds : [],
       });
 
-      // Map the Django user to the frontend User shape
       const apiUser = response.user;
       const newUser: User = {
         id: String(apiUser.id),
@@ -162,31 +205,16 @@ export default function Signup() {
         studentId: apiUser.student_id,
         programme: apiUser.program,
         department: apiUser.faculty,
-        school: FACULTIES.find(f => f.id === apiUser.faculty)?.name || '',
+        school: FACULTIES.find((f) => f.id === apiUser.faculty)?.name || '',
         yearOfStudy: apiUser.year,
         status: 'active',
         dateJoined: new Date().toISOString(),
       };
 
-      // Login (persists token in localStorage)
       login(newUser, response.token);
       setSuccess(true);
     } catch (err: any) {
-      // Parse Django validation errors
-      let msg = 'Signup failed. Please try again.';
-      try {
-        const parsed = JSON.parse(err.message);
-        if (typeof parsed === 'object') {
-          msg = Object.entries(parsed)
-            .map(([field, errors]) =>
-              `${field}: ${Array.isArray(errors) ? errors.join(', ') : errors}`
-            )
-            .join(' | ');
-        }
-      } catch {
-        msg = err.message || msg;
-      }
-      setError(msg);
+      setError(extractApiError(err));
     } finally {
       setLoading(false);
     }
@@ -194,10 +222,12 @@ export default function Signup() {
 
   const showStudentFields = formData.role === 'student';
   const showLecturerFields = formData.role === 'lecturer';
+  const showProgrammeField = (showStudentFields || showLecturerFields) && formData.faculty;
+  const showModulesField = showLecturerFields && formData.program;
 
   return (
     <div className="min-h-screen flex bg-white">
-      {/* Left panel — same as login */}
+      {/* Left panel — branding */}
       <div className="hidden lg:flex flex-col w-[480px] shrink-0 bg-navy-950 relative overflow-hidden">
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-20 -left-20 w-72 h-72 rounded-full border border-white/5" />
@@ -252,7 +282,7 @@ export default function Signup() {
                 { val: '250+', label: 'Resources' },
                 { val: '4', label: 'Schools' },
                 { val: '12+', label: 'Programmes' },
-              ].map(s => (
+              ].map((s) => (
                 <div key={s.label}>
                   <div className="text-white font-bold text-xl">{s.val}</div>
                   <div className="text-white/30 text-xs font-medium mt-0.5">{s.label}</div>
@@ -266,10 +296,9 @@ export default function Signup() {
         </div>
       </div>
 
-      {/* Right panel — signup form */}
+      {/* Right panel — form */}
       <div className="flex-1 flex flex-col items-center justify-center px-8 py-12 bg-white overflow-y-auto">
-        <div className="w-full max-w-[420px]">
-          {/* Mobile logo */}
+        <div className="w-full max-w-[440px]">
           <div className="lg:hidden flex items-center justify-center gap-3 mb-8">
             <div className="w-10 h-10 bg-navy-900 rounded-xl flex items-center justify-center">
               <svg viewBox="0 0 36 36" fill="none" width="22" height="22">
@@ -350,7 +379,7 @@ export default function Signup() {
                   name="email"
                   value={formData.email}
                   onChange={handleChange}
-                  placeholder="yourname@cavendish.ac.zm or @cavendish.co.zm"
+                  placeholder="yourname@cavendish.ac.zm"
                   className="w-full px-3.5 py-2.5 border border-navy-200 rounded-xl text-sm text-navy-800 placeholder-navy-300 focus:ring-2 focus:ring-navy-300 focus:border-navy-400 transition bg-white"
                   required
                 />
@@ -392,7 +421,7 @@ export default function Signup() {
                 </select>
               </div>
 
-              {/* Faculty/School - shown for student and lecturer */}
+              {/* Faculty — for students and lecturers */}
               {(showStudentFields || showLecturerFields) && (
                 <div>
                   <label className="block text-[11px] font-semibold text-navy-600 mb-1.5 uppercase tracking-wider">
@@ -403,39 +432,39 @@ export default function Signup() {
                     value={formData.faculty}
                     onChange={handleChange}
                     className="w-full px-3.5 py-2.5 border border-navy-200 rounded-xl text-sm text-navy-800 focus:ring-2 focus:ring-navy-300 focus:border-navy-400 transition bg-white"
-                    required={showStudentFields || showLecturerFields}
+                    required
                   >
                     <option value="">Select Faculty</option>
-                    {FACULTIES.map(f => (
+                    {FACULTIES.map((f) => (
                       <option key={f.id} value={f.id}>{f.name}</option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* Programme - only for students */}
-              {showStudentFields && formData.faculty && (
+              {/* Programme — for students AND lecturers now */}
+              {showProgrammeField && (
                 <div>
                   <label className="block text-[11px] font-semibold text-navy-600 mb-1.5 uppercase tracking-wider">
-                    Programme
+                    {showLecturerFields ? 'Programme You Teach In' : 'Programme'}
                   </label>
                   <select
                     name="program"
                     value={formData.program}
                     onChange={handleChange}
                     className="w-full px-3.5 py-2.5 border border-navy-200 rounded-xl text-sm text-navy-800 focus:ring-2 focus:ring-navy-300 focus:border-navy-400 transition bg-white"
-                    required={showStudentFields}
+                    required
                     disabled={!formData.faculty}
                   >
                     <option value="">Select Programme</option>
-                    {formData.faculty && PROGRAMS_BY_FACULTY[formData.faculty]?.map(p => (
+                    {formData.faculty && PROGRAMS_BY_FACULTY[formData.faculty]?.map((p) => (
                       <option key={p.id} value={p.id}>{p.name}</option>
                     ))}
                   </select>
                 </div>
               )}
 
-              {/* Year of Study - only for students */}
+              {/* Year of Study — students only */}
               {showStudentFields && (
                 <div>
                   <label className="block text-[11px] font-semibold text-navy-600 mb-1.5 uppercase tracking-wider">
@@ -446,13 +475,64 @@ export default function Signup() {
                     value={formData.year}
                     onChange={handleChange}
                     className="w-full px-3.5 py-2.5 border border-navy-200 rounded-xl text-sm text-navy-800 focus:ring-2 focus:ring-navy-300 focus:border-navy-400 transition bg-white"
-                    required={showStudentFields}
+                    required
                   >
                     <option value="">Select Year</option>
-                    {YEARS.map(y => (
+                    {YEARS.map((y) => (
                       <option key={y} value={y}>Year {y}</option>
                     ))}
                   </select>
+                </div>
+              )}
+
+              {/* ✅ NEW: Modules you teach — lecturers only */}
+              {showModulesField && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-navy-600 mb-1.5 uppercase tracking-wider">
+                    Modules You Teach <span className="text-red-500">*</span>
+                  </label>
+                  <div className="border border-navy-200 rounded-xl max-h-56 overflow-y-auto bg-white">
+                    {loadingModules ? (
+                      <div className="flex items-center justify-center gap-2 py-6 text-sm text-navy-500">
+                        <Loader2 size={16} className="animate-spin" />
+                        Loading modules...
+                      </div>
+                    ) : availableCourses.length === 0 ? (
+                      <div className="py-6 text-center text-sm text-navy-400">
+                        No modules found for this programme.
+                      </div>
+                    ) : (
+                      <div className="p-2 space-y-1">
+                        {availableCourses.map((c) => {
+                          const checked = selectedModuleIds.includes(c.id);
+                          return (
+                            <label
+                              key={c.id}
+                              className={`flex items-start gap-3 px-3 py-2 rounded-lg cursor-pointer transition ${
+                                checked ? 'bg-navy-50 border border-navy-200' : 'hover:bg-navy-50/50 border border-transparent'
+                              }`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={checked}
+                                onChange={() => toggleModule(c.id)}
+                                className="w-4 h-4 mt-0.5 rounded border-navy-300 accent-navy-800 cursor-pointer"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs font-bold text-navy-800">{c.code}</div>
+                                <div className="text-[11px] text-navy-500 leading-snug">{c.name}</div>
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-navy-400 mt-1">
+                    {selectedModuleIds.length === 0
+                      ? 'Select at least one module you teach.'
+                      : `${selectedModuleIds.length} module${selectedModuleIds.length > 1 ? 's' : ''} selected`}
+                  </p>
                 </div>
               )}
 
@@ -473,13 +553,13 @@ export default function Signup() {
                     />
                     <button
                       type="button"
-                      onClick={() => setShowPass(o => !o)}
+                      onClick={() => setShowPass((o) => !o)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-navy-400 hover:text-navy-600 transition"
                     >
                       {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
                   </div>
-                  <p className="text-[10px] text-navy-400 mt-1">Minimum 8 characters with letters and numbers</p>
+                  <p className="text-[10px] text-navy-400 mt-1">Minimum 8 characters</p>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-navy-600 mb-1.5 uppercase tracking-wider">
@@ -501,7 +581,7 @@ export default function Signup() {
                 <input
                   type="checkbox"
                   checked={agreeTerms}
-                  onChange={e => setAgreeTerms(e.target.checked)}
+                  onChange={(e) => setAgreeTerms(e.target.checked)}
                   className="w-4 h-4 mt-0.5 rounded border-navy-300 accent-navy-800 cursor-pointer"
                   required
                 />
