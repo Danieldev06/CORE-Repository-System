@@ -19,13 +19,11 @@ load_dotenv(BASE_DIR / '.env')
 # SECURITY
 # ============================================================
 
-# SECURITY WARNING: keep the secret key used in production secret!
 SECRET_KEY = os.getenv(
     'DJANGO_SECRET_KEY',
     'django-insecure-tqg2_v6%h(p=cf6*5*rn==cthpw!mdp&_^t#wy6xkk#v0a^2+i'
 )
 
-# SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DJANGO_DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = ['*']  # For development only
@@ -162,6 +160,14 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 
 # ============================================================
+# MEDIA FILES (for local fallback storage when offline)
+# ============================================================
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = BASE_DIR / 'media'
+
+
+# ============================================================
 # DEFAULT PRIMARY KEY
 # ============================================================
 
@@ -210,7 +216,7 @@ EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 
 
 # ============================================================
-# CLOUDINARY (Media file storage)
+# CLOUDINARY (Primary media storage)
 # ============================================================
 
 import cloudinary
@@ -230,12 +236,19 @@ cloudinary.config(
     api_key=CLOUDINARY_STORAGE['API_KEY'],
     api_secret=CLOUDINARY_STORAGE['API_SECRET'],
     secure=True,
+    timeout=5,   # ✅ Fail fast (5s) → fall back to local disk quickly
 )
 
-# Modern storage configuration (Django 5.1+)
+
+# ============================================================
+# STORAGES (Django 5.1+)
+# ============================================================
+# `repository.storage.ResilientStorage` tries Cloudinary first
+# and falls back to local MEDIA_ROOT on any network failure.
+
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.RawMediaCloudinaryStorage",
+        "BACKEND": "repository.storage.ResilientStorage",
     },
     "staticfiles": {
         "BACKEND": "django.contrib.staticfiles.storage.StaticFilesStorage",

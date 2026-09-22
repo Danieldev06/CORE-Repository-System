@@ -7,7 +7,10 @@ from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
 from django.db.models import Q
 from django.utils import timezone
+from django.http import FileResponse, HttpResponseRedirect
 import os
+import re
+import requests
 
 from .models import Department, Program, Course, Resource, StudentProfile
 from .serializers import (
@@ -28,6 +31,72 @@ def _get_user_profile(user):
     except StudentProfile.DoesNotExist:
         return None
     except Exception:
+        return None
+
+
+def _can_view_resource(user, resource):
+    """
+    Return True if the user is allowed to view/download this resource.
+    - Approved resources: public
+    - Unapproved resources: uploader, admin, or lecturer of that module
+    """
+    if resource.is_approved:
+        return True
+
+    if not user or not user.is_authenticated:
+        return False
+
+    if resource.uploaded_by_id == user.id:
+        return True
+
+    profile = _get_user_profile(user)
+    if not profile:
+        return False
+
+    if profile.role == 'admin':
+        return True
+
+    if profile.role == 'lecturer':
+        return profile.taught_modules.filter(id=resource.course_id).exists()
+
+    return False
+
+
+def _build_download_filename(resource):
+    """
+    Build a clean downloadable filename from the resource title.
+    Always ends in .pdf since all our resources are PDFs.
+    """
+    base = re.sub(r'[^a-zA-Z0-9_\- ]', '', resource.title or '').strip()
+    base = re.sub(r'\s+', '_', base) or 'resource'
+    base = base[:80]
+    if not base.lower().endswith('.pdf'):
+        base += '.pdf'
+    return base
+
+
+def _guess_content_type(filename_or_url):
+    """Return a content-type based on the file extension in the filename/url."""
+    lower = (filename_or_url or '').lower()
+    if lower.endswith('.pdf'):
+        return 'application/pdf'
+    if lower.endswith('.docx'):
+        return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    if lower.endswith('.doc'):
+        return 'application/msword'
+    return 'application/octet-stream'
+
+
+def _try_fetch_cloudinary(url):
+    """
+    Try to fetch a Cloudinary URL.
+    Returns a requests.Response on success, or None on failure.
+    """
+    try:
+        r = requests.get(url, stream=True, timeout=20)
+        r.raise_for_status()
+        return r
+    except requests.RequestException:
         return None
 
 
@@ -140,18 +209,125 @@ def get_resources(request):
     return Response(serializer.data)
 
 
+# ============================================================
+# RESOURCE DETAIL + DOWNLOAD
+# ============================================================
+
 @api_view(['GET'])
 @permission_classes([AllowAny])
 def get_resource_detail(request, resource_id):
+    """
+    Return a resource.
+    - Approved resources: public
+    - Unapproved resources: only uploader / lecturer in that module / admin
+    """
     try:
-        resource = Resource.objects.get(id=resource_id, is_approved=True)
-        serializer = ResourceSerializer(resource)
-        return Response(serializer.data)
+        resource = Resource.objects.select_related('course', 'uploaded_by').get(id=resource_id)
     except Resource.DoesNotExist:
         return Response(
             {'error': 'Resource not found'},
             status=status.HTTP_404_NOT_FOUND,
         )
+
+    if not _can_view_resource(request.user, resource):
+        return Response(
+            {'error': 'Not authorized to view this resource.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    return Response(ResourceSerializer(resource).data)
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def download_resource(request, resource_id):
+    """
+    Download a resource file.
+
+    Permission rules are identical to get_resource_detail.
+
+    - Local files: streamed directly from disk with a clean filename.
+    - Cloudinary files: proxied through Django so we can control the
+      Content-Type and Content-Disposition headers.
+
+    Compatibility note: files uploaded before the Cloudinary PREFIX fix
+    may have a redundant `/media/` segment in their URL. We try the
+    cleaned URL first, and fall back to the original if needed.
+    """
+    try:
+        resource = Resource.objects.select_related('course', 'uploaded_by').get(id=resource_id)
+    except Resource.DoesNotExist:
+        return Response(
+            {'error': 'Resource not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not _can_view_resource(request.user, resource):
+        return Response(
+            {'error': 'Not authorized to download this resource.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    resource.increment_download()
+
+    clean_filename = _build_download_filename(resource)
+    content_type = _guess_content_type(clean_filename)
+
+    file_url = resource.file_pdf.url
+
+    # ------------------------------------------------------------
+    # Cloudinary → proxy through Django to fix headers
+    # ------------------------------------------------------------
+    if file_url.startswith('http://') or file_url.startswith('https://'):
+
+        # Try the cleaned URL first (strip redundant /media/ segment)
+        cleaned_url = file_url.replace('/media/', '/', 1)
+        upstream = _try_fetch_cloudinary(cleaned_url)
+
+        # Fall back to the original URL if the cleaned one fails
+        if upstream is None and cleaned_url != file_url:
+            upstream = _try_fetch_cloudinary(file_url)
+
+        if upstream is None:
+            return Response(
+                {'error': f'Failed to fetch file from storage. The file may have been removed.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        response = FileResponse(
+            upstream.raw,
+            as_attachment=True,
+            filename=clean_filename,
+            content_type=content_type,
+        )
+        length = upstream.headers.get('Content-Length')
+        if length:
+            response['Content-Length'] = length
+        return response
+
+    # ------------------------------------------------------------
+    # Local file → stream from disk
+    # ------------------------------------------------------------
+    try:
+        file_path = resource.file_pdf.path
+    except Exception:
+        return Response(
+            {'error': 'File not found on disk.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not os.path.exists(file_path):
+        return Response(
+            {'error': 'File not found on disk.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    return FileResponse(
+        open(file_path, 'rb'),
+        as_attachment=True,
+        filename=clean_filename,
+        content_type=content_type,
+    )
 
 
 # ============================================================
@@ -224,11 +400,6 @@ def create_resource(request):
     - Student  → is_approved=False (waits for lecturer review)
     - Lecturer → is_approved=True  (auto-approved)
     - Admin    → is_approved=True  (auto-approved)
-
-    Course access:
-    - Student:  must belong to their programme
-    - Lecturer: must be one of their taught modules
-    - Admin:    unrestricted
     """
     title = request.data.get('title')
     course_id = request.data.get('course')
@@ -238,7 +409,6 @@ def create_resource(request):
     file = request.FILES.get('file_pdf')
     is_shared = request.data.get('is_shared', 'false').lower() in ['true', '1', 'yes']
 
-    # Basic validation
     errors = {}
     if not title:
         errors['title'] = ['Title is required.']
@@ -249,7 +419,6 @@ def create_resource(request):
     if errors:
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
-    # Validate course exists
     try:
         course = Course.objects.select_related('program').get(id=course_id)
     except Course.DoesNotExist:
@@ -258,7 +427,6 @@ def create_resource(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # Access validation per role
     profile = _get_user_profile(request.user)
     if profile and profile.role != 'admin':
         if profile.role == 'student':
@@ -274,7 +442,6 @@ def create_resource(request):
                     status=status.HTTP_403_FORBIDDEN,
                 )
 
-    # Validate file type and size
     if file.size > 50 * 1024 * 1024:
         return Response(
             {'file_pdf': ['File must be under 50MB.']},
@@ -287,11 +454,9 @@ def create_resource(request):
             status=status.HTTP_400_BAD_REQUEST,
         )
 
-    # ✅ Determine auto-approval based on role
     user_role = profile.role if profile else 'student'
     should_auto_approve = user_role in ('lecturer', 'admin')
 
-    # Create the resource
     resource = Resource.objects.create(
         title=title,
         course=course,
@@ -329,10 +494,6 @@ def my_submissions(request):
 @api_view(['GET', 'PUT'])
 @permission_classes([IsAuthenticated])
 def lecturer_modules(request):
-    """
-    GET:  Return the lecturer's taught modules.
-    PUT:  Replace the lecturer's taught modules (body: { module_ids: [...] }).
-    """
     profile = _get_user_profile(request.user)
     if not profile or profile.role != 'lecturer':
         return Response(
@@ -344,7 +505,6 @@ def lecturer_modules(request):
         modules = profile.taught_modules.all().values('id', 'code', 'name')
         return Response(list(modules))
 
-    # PUT
     serializer = LecturerModulesSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -370,10 +530,6 @@ def lecturer_modules(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def lecturer_pending_submissions(request):
-    """
-    Return pending resources uploaded for courses the lecturer teaches.
-    Excludes resources uploaded by the lecturer themselves.
-    """
     profile = _get_user_profile(request.user)
     if not profile or profile.role != 'lecturer':
         return Response(
@@ -397,11 +553,6 @@ def lecturer_pending_submissions(request):
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def lecturer_decide_submission(request, resource_id):
-    """
-    Approve or reject a submission.
-    Body: { action: 'approve' | 'reject' }
-    Only allowed for courses the lecturer teaches.
-    """
     profile = _get_user_profile(request.user)
     if not profile or profile.role != 'lecturer':
         return Response(

@@ -10,9 +10,17 @@ urlpatterns = [
     path('api/courses/', views.get_courses, name='api_courses'),
     path('api/resources/', views.get_resources, name='api_resources'),
 
-    # Specific resource endpoints MUST come before the generic <int:id> route
+    # ============================================================
+    # RESOURCE ROUTES
+    # Order matters: literal paths first, dynamic routes last.
+    # ============================================================
     path('api/resources/create/', views.create_resource, name='api_resource_create'),
     path('api/resources/my-submissions/', views.my_submissions, name='api_my_submissions'),
+
+    # ✅ NEW: Download route must come BEFORE the generic <int:resource_id>/ route
+    path('api/resources/<int:resource_id>/download/', views.download_resource, name='api_resource_download'),
+
+    # Generic detail route goes last
     path('api/resources/<int:resource_id>/', views.get_resource_detail, name='api_resource_detail'),
 
     # ============================================================

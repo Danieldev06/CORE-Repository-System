@@ -6,14 +6,29 @@ import { RESOURCE_TYPE_LABELS } from '../data';
 import { PageHeader, ResourceTypeBadge } from '../components/Layout';
 import { api } from '../services/api';
 import { adaptResources } from '../utils/adapters';
+import { downloadResourceWithAuth } from '../utils/fileUrl';
 import type { Resource } from '../types';
 
 // Years the API returns (upload year)
 const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
 
 function ResourceGridCard({ resource }: { resource: Resource }) {
-  const { navigate, bookmarkedIds, toggleBookmark, addDownload } = useApp();
+  const { navigate, bookmarkedIds, toggleBookmark, addDownload, showToast } = useApp();
   const bookmarked = bookmarkedIds.includes(resource.id);
+
+  const handleDownload = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await downloadResourceWithAuth(resource.id, `${resource.title}.pdf`);
+      addDownload(resource.id);
+    } catch (err: any) {
+      showToast({
+        message: `Download failed: ${err.message || 'Unknown error'}`,
+        type: 'error',
+      });
+    }
+  };
+
   return (
     <div className="bg-white rounded-xl border border-navy-100 p-5 hover:border-navy-300 hover:shadow-md transition-all duration-150 flex flex-col group">
       <div className="flex items-start justify-between gap-2 mb-3">
@@ -53,9 +68,7 @@ function ResourceGridCard({ resource }: { resource: Resource }) {
             </span>
           </div>
           <button
-            onClick={() => {
-              addDownload(resource.id);
-            }}
+            onClick={handleDownload}
             className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
           >
             <Download size={11} /> Download
@@ -67,8 +80,21 @@ function ResourceGridCard({ resource }: { resource: Resource }) {
 }
 
 function ResourceListRow({ resource }: { resource: Resource }) {
-  const { navigate, bookmarkedIds, toggleBookmark, addDownload } = useApp();
+  const { navigate, bookmarkedIds, toggleBookmark, addDownload, showToast } = useApp();
   const bookmarked = bookmarkedIds.includes(resource.id);
+
+  const handleDownload = async () => {
+    try {
+      await downloadResourceWithAuth(resource.id, `${resource.title}.pdf`);
+      addDownload(resource.id);
+    } catch (err: any) {
+      showToast({
+        message: `Download failed: ${err.message || 'Unknown error'}`,
+        type: 'error',
+      });
+    }
+  };
+
   return (
     <div className="flex items-center gap-4 px-4 py-3.5 border-b border-navy-50 hover:bg-navy-50 transition group">
       <div className="flex-1 min-w-0">
@@ -96,7 +122,7 @@ function ResourceListRow({ resource }: { resource: Resource }) {
           {bookmarked ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
         </button>
         <button
-          onClick={() => addDownload(resource.id)}
+          onClick={handleDownload}
           className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
         >
           <Download size={11} /> Download
@@ -169,9 +195,7 @@ export default function RepositoryView() {
   };
   const hasFilters = search || selectedType || selectedYear;
 
-  // ------------------------------------------------------------
   // Loading
-  // ------------------------------------------------------------
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -181,9 +205,7 @@ export default function RepositoryView() {
     );
   }
 
-  // ------------------------------------------------------------
   // Error
-  // ------------------------------------------------------------
   if (error) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-center">
@@ -198,9 +220,7 @@ export default function RepositoryView() {
     );
   }
 
-  // ------------------------------------------------------------
   // Main
-  // ------------------------------------------------------------
   return (
     <div>
       <PageHeader
@@ -210,7 +230,7 @@ export default function RepositoryView() {
       />
 
       <div className="p-6">
-        {/* Scope banner — tells the user what they're seeing */}
+        {/* Scope banner */}
         {user?.programme && (
           <div className="bg-navy-50 border border-navy-200 rounded-xl p-3.5 flex items-start gap-3 mb-5 text-xs text-navy-700">
             <Info size={14} className="text-navy-500 shrink-0 mt-0.5" />

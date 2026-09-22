@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Clock, CheckCircle, XCircle, AlertCircle, MessageSquare, RefreshCw, Plus, Loader2 } from 'lucide-react';
+import { FileText, Clock, CheckCircle, XCircle, AlertCircle, MessageSquare, RefreshCw, Plus, Loader2, Download } from 'lucide-react';
 import { useApp } from '../context';
 import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { resourceApi, extractApiError, type Resource as ApiResource } from '../services/api';
+import { downloadResourceWithAuth } from '../utils/fileUrl';
 import type { Submission, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -20,7 +21,6 @@ function adaptSubmission(r: ApiResource): Submission {
   const apiType = API_TYPE_TO_FRONTEND[r.resource_type] || 'other';
   const status: ResourceStatus = r.is_approved ? 'approved' : 'under-review';
 
-  // Extract file extension from URL
   const ext = (r.file_pdf || '').split('.').pop()?.toUpperCase() || 'PDF';
 
   return {
@@ -88,6 +88,17 @@ export default function MySubmissions() {
   const handleRefresh = () => {
     setRefreshing(true);
     fetchSubmissions(true);
+  };
+
+  const handleDownload = async (sub: Submission) => {
+    try {
+      await downloadResourceWithAuth(sub.id, `${sub.title}.pdf`);
+    } catch (err: any) {
+      showToast({
+        message: `Download failed: ${err.message || 'Unknown error'}`,
+        type: 'error',
+      });
+    }
   };
 
   const counts = {
@@ -258,15 +269,23 @@ export default function MySubmissions() {
                     })}
                   </div>
 
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-navy-400">
-                    <span>
-                      Submitted: <span className="text-navy-600 font-medium">{sub.submittedDate}</span>
-                    </span>
-                    {sub.fileType && (
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-xs text-navy-400">
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
                       <span>
-                        File: <span className="text-navy-600">{sub.fileType}</span>
+                        Submitted: <span className="text-navy-600 font-medium">{sub.submittedDate}</span>
                       </span>
-                    )}
+                      {sub.fileType && (
+                        <span>
+                          File: <span className="text-navy-600">{sub.fileType}</span>
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => handleDownload(sub)}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
+                    >
+                      <Download size={12} /> Download
+                    </button>
                   </div>
                 </div>
 

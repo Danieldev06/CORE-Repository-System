@@ -3,6 +3,7 @@ import { Eye, CheckCircle, XCircle, RefreshCw, MessageSquare, FileText, ChevronL
 import { useApp } from '../context';
 import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { extractApiError, type Resource as ApiResource } from '../services/api';
+import { downloadResourceWithAuth } from '../utils/fileUrl';
 import type { Submission, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -97,6 +98,17 @@ function ReviewDetail({
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
 
+  const handleDownload = async () => {
+    try {
+      await downloadResourceWithAuth(submission.id, `${submission.title}.pdf`);
+    } catch (err: any) {
+      showToast({
+        message: `Download failed: ${err.message || 'Unknown error'}`,
+        type: 'error',
+      });
+    }
+  };
+
   const handleSubmit = async () => {
     if (!decision) return;
     if (decision === 'reject' && !comments.trim()) return;
@@ -114,12 +126,12 @@ function ReviewDetail({
       await decideSubmission(token, submission.id, decision);
       setDone(true);
       showToast({
-        message: decision === 'approve'
-          ? 'Submission approved and published.'
-          : 'Submission rejected and removed.',
+        message:
+          decision === 'approve'
+            ? 'Submission approved and published.'
+            : 'Submission rejected and removed.',
         type: decision === 'approve' ? 'success' : 'info',
       });
-      // Refresh the list behind the scenes
       onDecisionMade();
     } catch (err: any) {
       const msg = extractApiError(err);
@@ -194,14 +206,12 @@ function ReviewDetail({
                   {submission.title}
                 </div>
                 <div className="text-navy-400 text-xs mt-1">{submission.fileType}</div>
-                <a
-                  href={`http://localhost:8000/api/resources/${submission.id}/`}
-                  target="_blank"
-                  rel="noreferrer"
+                <button
+                  onClick={handleDownload}
                   className="mt-3 inline-flex items-center gap-1 text-xs text-navy-700 font-semibold underline hover:text-navy-900 transition"
                 >
                   <Download size={11} /> Download to review
-                </a>
+                </button>
               </div>
             </div>
           </div>
@@ -408,17 +418,7 @@ export default function ReviewSubmissions() {
     fetchPending(true);
   };
 
-  // Find the submission for the selected ID
   const selected = selectedId ? pending.find((s) => s.id === selectedId) : null;
-
-  // If a submission was selected but no longer in the list (e.g. it was just approved/rejected), back out
-  useEffect(() => {
-    if (selectedId && !loading && !pending.find((s) => s.id === selectedId)) {
-      // Keep it selected in case user wants to see the success screen inside ReviewDetail
-      // But if the user has already finished a decision, they'll click back anyway.
-      // No auto-navigation here.
-    }
-  }, [selectedId, pending, loading]);
 
   if (selectedId && selected) {
     return (
@@ -457,18 +457,18 @@ export default function ReviewSubmissions() {
         }
       />
       <div className="p-6 max-w-5xl mx-auto space-y-6">
-        {/* Banner */}
         {!loading && pending.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3 text-sm text-amber-700">
             <AlertCircle size={16} className="shrink-0" />
             <span>
-              <strong>{pending.length} submission{pending.length > 1 ? 's' : ''}</strong>{' '}
+              <strong>
+                {pending.length} submission{pending.length > 1 ? 's' : ''}
+              </strong>{' '}
               awaiting your review.
             </span>
           </div>
         )}
 
-        {/* Loading */}
         {loading && (
           <div className="flex flex-col items-center justify-center py-20 bg-white rounded-xl border border-navy-100">
             <Loader2 size={36} className="text-navy-500 animate-spin mb-3" />
@@ -476,7 +476,6 @@ export default function ReviewSubmissions() {
           </div>
         )}
 
-        {/* Error */}
         {!loading && error && (
           <div className="flex items-start gap-3 p-5 bg-red-50 border border-red-200 rounded-xl text-red-700 text-sm">
             <AlertCircle size={18} className="shrink-0 mt-0.5" />
@@ -493,7 +492,6 @@ export default function ReviewSubmissions() {
           </div>
         )}
 
-        {/* Empty */}
         {!loading && !error && pending.length === 0 && (
           <div className="text-center py-20 bg-white rounded-xl border border-navy-100">
             <CheckCircle size={40} className="text-emerald-300 mx-auto mb-3" />
@@ -504,7 +502,6 @@ export default function ReviewSubmissions() {
           </div>
         )}
 
-        {/* Submissions list */}
         {!loading && !error && pending.length > 0 && (
           <div className="bg-white rounded-xl border border-navy-100 overflow-hidden shadow-sm">
             <div className="bg-navy-50 border-b border-navy-100 px-4 py-3 grid grid-cols-12 gap-4">

@@ -1,4 +1,4 @@
-from cloudinary_storage.storage import RawMediaCloudinaryStorage
+from .storage import ResilientStorage
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
@@ -92,10 +92,10 @@ class Resource(models.Model):
     semester = models.IntegerField(choices=SEMESTER_CHOICES)
     resource_type = models.CharField(max_length=20, choices=RESOURCE_TYPES)
 
-    # ✅ Files go to Cloudinary as raw files (PDF, DOCX, etc.)
+    # ✅ Files: try Cloudinary first, fall back to local disk if offline
     file_pdf = models.FileField(
         upload_to='resources/%Y/%m/%d/',
-        storage=RawMediaCloudinaryStorage(),
+        storage=ResilientStorage(),
     )
 
     uploaded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True)
@@ -137,7 +137,6 @@ class StudentProfile(models.Model):
         default='student',
     )
 
-    # Academic affiliation (used by both students and lecturers)
     department = models.ForeignKey(
         Department, on_delete=models.SET_NULL, null=True, blank=True
     )
@@ -147,7 +146,6 @@ class StudentProfile(models.Model):
     current_year = models.IntegerField(choices=YEAR_CHOICES, default=1)
     phone_number = models.CharField(max_length=15, blank=True)
 
-    # ✅ NEW: Modules a lecturer teaches (only relevant when role='lecturer')
     taught_modules = models.ManyToManyField(
         Course,
         blank=True,
