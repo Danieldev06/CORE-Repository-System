@@ -210,7 +210,7 @@ def get_resources(request):
 
 
 # ============================================================
-# RESOURCE DETAIL + DOWNLOAD
+# RESOURCE DETAIL + DOWNLOAD + PREVIEW
 # ============================================================
 
 @api_view(['GET'])
@@ -310,6 +310,87 @@ def download_resource(request, resource_id):
         filename=clean_filename,
         content_type=content_type,
     )
+
+
+@api_view(['GET'])
+@permission_classes([AllowAny])
+def preview_resource(request, resource_id):
+    """
+    Serve a resource inline (in-browser preview) rather than as an attachment.
+
+    Permission rules are identical to download_resource, but:
+    - Content-Disposition is 'inline' instead of 'attachment'
+    - The download counter is NOT incremented
+    """
+    try:
+        resource = Resource.objects.select_related('course', 'uploaded_by').get(id=resource_id)
+    except Resource.DoesNotExist:
+        return Response(
+            {'error': 'Resource not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not _can_view_resource(request.user, resource):
+        return Response(
+            {'error': 'Not authorized to preview this resource.'},
+            status=status.HTTP_403_FORBIDDEN,
+        )
+
+    clean_filename = _build_download_filename(resource)
+    content_type = _guess_content_type(clean_filename)
+
+    file_url = resource.file_pdf.url
+
+    # Cloudinary → proxy inline
+    if file_url.startswith('http://') or file_url.startswith('https://'):
+
+        cleaned_url = file_url.replace('/media/', '/', 1)
+        upstream = _try_fetch_cloudinary(cleaned_url)
+
+        if upstream is None and cleaned_url != file_url:
+            upstream = _try_fetch_cloudinary(file_url)
+
+        if upstream is None:
+            return Response(
+                {'error': 'Failed to fetch file from storage. The file may have been removed.'},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+
+        response = FileResponse(
+            upstream.raw,
+            as_attachment=False,
+            filename=clean_filename,
+            content_type=content_type,
+        )
+        length = upstream.headers.get('Content-Length')
+        if length:
+            response['Content-Length'] = length
+        response['Content-Disposition'] = f'inline; filename="{clean_filename}"'
+        return response
+
+    # Local file → stream inline
+    try:
+        file_path = resource.file_pdf.path
+    except Exception:
+        return Response(
+            {'error': 'File not found on disk.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if not os.path.exists(file_path):
+        return Response(
+            {'error': 'File not found on disk.'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    response = FileResponse(
+        open(file_path, 'rb'),
+        as_attachment=False,
+        filename=clean_filename,
+        content_type=content_type,
+    )
+    response['Content-Disposition'] = f'inline; filename="{clean_filename}"'
+    return response
 
 
 # ============================================================

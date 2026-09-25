@@ -16,7 +16,12 @@ urlpatterns = [
     # ============================================================
     path('api/resources/create/', views.create_resource, name='api_resource_create'),
     path('api/resources/my-submissions/', views.my_submissions, name='api_my_submissions'),
+
+    # ✅ Preview must come BEFORE the generic detail route
+    path('api/resources/<int:resource_id>/preview/', views.preview_resource, name='api_resource_preview'),
     path('api/resources/<int:resource_id>/download/', views.download_resource, name='api_resource_download'),
+
+    # Generic detail route goes LAST
     path('api/resources/<int:resource_id>/', views.get_resource_detail, name='api_resource_detail'),
 
     # ============================================================
@@ -41,6 +46,7 @@ urlpatterns = [
 
     # Stats
     path('api/admin/stats/', views.admin_stats, name='api_admin_stats'),
+    path('api/admin/analytics/', views.admin_analytics, name='api_admin_analytics'),
 
     # Resources
     path('api/admin/resources/', views.admin_resources, name='api_admin_resources'),

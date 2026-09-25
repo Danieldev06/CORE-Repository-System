@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { FileText, Clock, CheckCircle, XCircle, AlertCircle, MessageSquare, RefreshCw, Plus, Loader2, Download } from 'lucide-react';
+import { FileText, Clock, CheckCircle, XCircle, AlertCircle, MessageSquare, RefreshCw, Plus, Loader2, Download, Eye } from 'lucide-react';
 import { useApp } from '../context';
 import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { resourceApi, extractApiError, type Resource as ApiResource } from '../services/api';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Submission, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -57,6 +58,7 @@ export default function MySubmissions() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [previewSubmission, setPreviewSubmission] = useState<Submission | null>(null);  // ← NEW
 
   const fetchSubmissions = useCallback(async (showRefreshToast = false) => {
     const token = localStorage.getItem('core_token');
@@ -280,12 +282,22 @@ export default function MySubmissions() {
                         </span>
                       )}
                     </div>
-                    <button
-                      onClick={() => handleDownload(sub)}
-                      className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
-                    >
-                      <Download size={12} /> Download
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setPreviewSubmission(sub)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-white border border-navy-200 hover:bg-navy-50 text-navy-700 text-xs font-semibold rounded-lg transition"
+                        title="Preview"
+                      >
+                        <Eye size={12} /> Preview
+                      </button>
+                      <button
+                        onClick={() => handleDownload(sub)}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
+                        title="Download"
+                      >
+                        <Download size={12} /> Download
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -314,6 +326,16 @@ export default function MySubmissions() {
           </div>
         )}
       </div>
+
+      {/* ✅ Preview Modal */}
+      {previewSubmission && (
+        <DocumentPreview
+          resourceId={previewSubmission.id}
+          title={previewSubmission.title}
+          fileType={previewSubmission.fileType}
+          onClose={() => setPreviewSubmission(null)}
+        />
+      )}
     </div>
   );
 }

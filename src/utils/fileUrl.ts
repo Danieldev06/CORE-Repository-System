@@ -78,3 +78,56 @@ export async function downloadResourceWithAuth(
     throw err;
   }
 }
+
+
+/**
+ * Returns the preview URL for a resource.
+ * The backend serves the file with `Content-Disposition: inline`,
+ * so browsers render it in-place instead of downloading.
+ */
+export function getPreviewUrl(resourceId: string | number): string {
+  return `${API_ORIGIN}/api/resources/${resourceId}/preview/`;
+}
+
+/**
+ * Opens the preview in a new tab, handling auth for unapproved files.
+ *
+ * Strategy:
+ * 1. Fetch the preview URL with the auth token.
+ * 2. Convert the response to a Blob.
+ * 3. Create a temporary object URL.
+ * 4. Open that in a new tab.
+ * 5. Revoke the object URL after 60s.
+ *
+ * This ensures unapproved files (visible only to uploader/lecturer/admin)
+ * can still be previewed.
+ */
+export async function openPreviewWithAuth(
+  resourceId: string | number
+): Promise<void> {
+  const token = localStorage.getItem('core_token');
+  const url = getPreviewUrl(resourceId);
+
+  try {
+    const headers: Record<string, string> = {};
+    if (token) headers.Authorization = `Token ${token}`;
+
+    const response = await fetch(url, { headers });
+
+    if (!response.ok) {
+      const message = await response.text().catch(() => '');
+      throw new Error(message || `Preview failed (${response.status})`);
+    }
+
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+
+    window.open(blobUrl, '_blank', 'noopener,noreferrer');
+
+    // Revoke after 60s to give the new tab time to load
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  } catch (err) {
+    console.error('Preview failed:', err);
+    throw err;
+  }
+}

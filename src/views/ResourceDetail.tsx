@@ -9,6 +9,7 @@ import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout
 import { api, extractApiError, type Resource as ApiResource } from '../services/api';
 import { adaptResources } from '../utils/adapters';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Resource } from '../types';
 
 export default function ResourceDetail() {
@@ -17,6 +18,7 @@ export default function ResourceDetail() {
   const [related, setRelated] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [previewOpen, setPreviewOpen] = useState(false);   // ← NEW
 
   // Fetch the resource detail
   useEffect(() => {
@@ -169,16 +171,16 @@ export default function ResourceDetail() {
               {/* Action buttons */}
               <div className="flex flex-wrap gap-3 pt-4 border-t border-navy-50">
                 <button
-                  onClick={handleDownload}
+                  onClick={() => setPreviewOpen(true)}
                   className="flex items-center gap-2 px-4 py-2.5 bg-navy-800 hover:bg-navy-700 text-white font-semibold rounded-xl text-sm transition"
                 >
-                  <Download size={16} /> Download
+                  <Eye size={16} /> Preview
                 </button>
                 <button
                   onClick={handleDownload}
                   className="flex items-center gap-2 px-4 py-2.5 bg-white border border-navy-200 hover:bg-navy-50 text-navy-700 font-semibold rounded-xl text-sm transition"
                 >
-                  <Eye size={16} /> Preview
+                  <Download size={16} /> Download
                 </button>
                 <button
                   onClick={() => toggleBookmark(resource.id)}
@@ -224,17 +226,17 @@ export default function ResourceDetail() {
               <p className="text-sm text-navy-600 leading-relaxed">{resource.description}</p>
             </div>
 
-            {/* Document Preview */}
+            {/* Document Preview Card */}
             <div className="bg-white rounded-xl border border-navy-100 overflow-hidden shadow-sm">
               <div className="flex items-center justify-between px-5 py-4 border-b border-navy-100 bg-navy-50">
                 <div className="flex items-center gap-2 text-sm font-semibold text-navy-700">
                   <FileText size={15} /> Document Preview
                 </div>
                 <button
-                  onClick={handleDownload}
+                  onClick={() => setPreviewOpen(true)}
                   className="text-xs text-navy-600 hover:text-navy-800 font-medium flex items-center gap-1"
                 >
-                  <ExternalLink size={12} /> Open in new tab
+                  <ExternalLink size={12} /> Open full preview
                 </button>
               </div>
               <div className="bg-gray-50 h-72 flex items-center justify-center border-b border-navy-100">
@@ -242,12 +244,14 @@ export default function ResourceDetail() {
                   <div className="w-16 h-20 bg-white border-2 border-navy-200 rounded-lg mx-auto mb-3 flex items-center justify-center">
                     <FileText size={28} className="text-navy-300" />
                   </div>
-                  <div className="text-navy-500 text-sm font-medium">{resource.fileType} Document</div>
+                  <div className="text-navy-500 text-sm font-medium">
+                    {resource.fileType} Document
+                  </div>
                   <button
-                    onClick={handleDownload}
+                    onClick={() => setPreviewOpen(true)}
                     className="mt-3 text-xs text-navy-700 hover:text-navy-900 font-semibold underline"
                   >
-                    Download to view
+                    Open preview
                   </button>
                 </div>
               </div>
@@ -330,6 +334,17 @@ export default function ResourceDetail() {
           </div>
         </div>
       </div>
+
+      {/* ✅ Preview Modal */}
+      {previewOpen && (
+        <DocumentPreview
+          resourceId={resource.id}
+          title={resource.title}
+          fileType={resource.fileType}
+          onClose={() => setPreviewOpen(false)}
+          onDownloadSuccess={() => addDownload(resource.id)}
+        />
+      )}
     </div>
   );
 }

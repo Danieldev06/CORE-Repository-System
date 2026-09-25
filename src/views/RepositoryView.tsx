@@ -1,18 +1,32 @@
 // src/views/RepositoryView.tsx
 import { useState, useMemo, useEffect } from 'react';
-import { Search, Filter, Grid, List, Download, Bookmark, BookmarkCheck, ChevronLeft, ChevronRight, X, Loader2, Info } from 'lucide-react';
+import {
+  Search, Filter, Grid, List, Download, Bookmark, BookmarkCheck,
+  ChevronLeft, ChevronRight, X, Loader2, Info, Eye
+} from 'lucide-react';
 import { useApp } from '../context';
 import { RESOURCE_TYPE_LABELS } from '../data';
 import { PageHeader, ResourceTypeBadge } from '../components/Layout';
 import { api } from '../services/api';
 import { adaptResources } from '../utils/adapters';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Resource } from '../types';
 
 // Years the API returns (upload year)
 const UPLOAD_YEARS = ['2026', '2025', '2024', '2023'];
 
-function ResourceGridCard({ resource }: { resource: Resource }) {
+// ============================================================
+// GRID CARD
+// ============================================================
+
+function ResourceGridCard({
+  resource,
+  onPreview,
+}: {
+  resource: Resource;
+  onPreview: (r: Resource) => void;
+}) {
   const { navigate, bookmarkedIds, toggleBookmark, addDownload, showToast } = useApp();
   const bookmarked = bookmarkedIds.includes(resource.id);
 
@@ -61,25 +75,46 @@ function ResourceGridCard({ resource }: { resource: Resource }) {
             {resource.courseCode} · {resource.fileType}
           </div>
         )}
-        <div className="flex items-center justify-between">
-          <div className="text-[11px] text-navy-400 flex items-center gap-2">
-            <span className="flex items-center gap-1">
-              <Download size={10} /> {resource.downloads}
-            </span>
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-[11px] text-navy-400 flex items-center gap-1">
+            <Download size={10} /> {resource.downloads}
           </div>
-          <button
-            onClick={handleDownload}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
-          >
-            <Download size={11} /> Download
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview(resource);
+              }}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-white border border-navy-200 hover:bg-navy-50 text-navy-700 text-xs font-semibold rounded-lg transition"
+              title="Preview"
+            >
+              <Eye size={11} /> Preview
+            </button>
+            <button
+              onClick={handleDownload}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
+              title="Download"
+            >
+              <Download size={11} />
+            </button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
-function ResourceListRow({ resource }: { resource: Resource }) {
+// ============================================================
+// LIST ROW
+// ============================================================
+
+function ResourceListRow({
+  resource,
+  onPreview,
+}: {
+  resource: Resource;
+  onPreview: (r: Resource) => void;
+}) {
   const { navigate, bookmarkedIds, toggleBookmark, addDownload, showToast } = useApp();
   const bookmarked = bookmarkedIds.includes(resource.id);
 
@@ -96,7 +131,7 @@ function ResourceListRow({ resource }: { resource: Resource }) {
   };
 
   return (
-    <div className="flex items-center gap-4 px-4 py-3.5 border-b border-navy-50 hover:bg-navy-50 transition group">
+    <div className="flex items-center gap-4 px-4 py-3.5 border-b border-navy-50 hover:bg-navy-50 transition group last:border-none">
       <div className="flex-1 min-w-0">
         <button onClick={() => navigate('resource-detail', { id: resource.id })} className="text-left">
           <div className="font-semibold text-navy-800 text-sm group-hover:text-navy-600 transition truncate">
@@ -122,8 +157,16 @@ function ResourceListRow({ resource }: { resource: Resource }) {
           {bookmarked ? <BookmarkCheck size={14} /> : <Bookmark size={14} />}
         </button>
         <button
+          onClick={() => onPreview(resource)}
+          className="flex items-center gap-1.5 px-2.5 py-1.5 bg-white border border-navy-200 hover:bg-navy-50 text-navy-700 text-xs font-semibold rounded-lg transition"
+          title="Preview"
+        >
+          <Eye size={11} /> Preview
+        </button>
+        <button
           onClick={handleDownload}
           className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
+          title="Download"
         >
           <Download size={11} /> Download
         </button>
@@ -132,8 +175,12 @@ function ResourceListRow({ resource }: { resource: Resource }) {
   );
 }
 
+// ============================================================
+// MAIN COMPONENT
+// ============================================================
+
 export default function RepositoryView() {
-  const { user } = useApp();
+  const { user, addDownload } = useApp();
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -144,6 +191,9 @@ export default function RepositoryView() {
   const [selectedYear, setSelectedYear] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 8;
+
+  // Preview modal state
+  const [previewResource, setPreviewResource] = useState<Resource | null>(null);
 
   // Fetch resources from API (backend auto-scopes by user's programme)
   useEffect(() => {
@@ -351,7 +401,11 @@ export default function RepositoryView() {
         ) : viewMode === 'grid' ? (
           <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {paginated.map((r) => (
-              <ResourceGridCard key={r.id} resource={r} />
+              <ResourceGridCard
+                key={r.id}
+                resource={r}
+                onPreview={setPreviewResource}
+              />
             ))}
           </div>
         ) : (
@@ -366,12 +420,16 @@ export default function RepositoryView() {
               <span className="hidden lg:block w-16 text-xs font-semibold text-navy-600 uppercase tracking-wide">
                 Downloads
               </span>
-              <span className="w-24 text-xs font-semibold text-navy-600 uppercase tracking-wide text-right">
+              <span className="w-40 text-xs font-semibold text-navy-600 uppercase tracking-wide text-right">
                 Actions
               </span>
             </div>
             {paginated.map((r) => (
-              <ResourceListRow key={r.id} resource={r} />
+              <ResourceListRow
+                key={r.id}
+                resource={r}
+                onPreview={setPreviewResource}
+              />
             ))}
           </div>
         )}
@@ -407,6 +465,17 @@ export default function RepositoryView() {
           </div>
         )}
       </div>
+
+      {/* ✅ Preview Modal */}
+      {previewResource && (
+        <DocumentPreview
+          resourceId={previewResource.id}
+          title={previewResource.title}
+          fileType={previewResource.fileType}
+          onClose={() => setPreviewResource(null)}
+          onDownloadSuccess={() => addDownload(previewResource.id)}
+        />
+      )}
     </div>
   );
 }
