@@ -12,6 +12,7 @@ export type ViewType =
   | 'download-history'
   | 'lecturer-dashboard'
   | 'lecturer-resources'
+  | 'lecturer-modules'
   | 'upload-resource'
   | 'review-submissions'
   | 'review-submission-detail'

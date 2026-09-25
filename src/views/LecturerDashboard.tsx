@@ -7,6 +7,7 @@ import {
 import { useApp } from '../context';
 import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { api, resourceApi, extractApiError, type Resource as ApiResource } from '../services/api';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Submission, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -141,6 +142,7 @@ export default function LecturerDashboard() {
   const [approvedCount, setApprovedCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [previewResource, setPreviewResource] = useState<AdaptedResource | null>(null);
 
   const fetchData = useCallback(async () => {
     const token = localStorage.getItem('core_token');
@@ -469,11 +471,18 @@ export default function LecturerDashboard() {
                       <div className="text-[11px] text-navy-400">
                         {r.courseCode || r.academicYear} · {r.fileType}
                       </div>
-                      <div className="flex items-center gap-3 text-[11px] text-navy-400">
+                      <div className="flex items-center gap-2 text-[11px] text-navy-400">
                         <span className="flex items-center gap-1">
                           <Download size={10} />
                           {r.downloads}
                         </span>
+                        <button
+                          onClick={() => setPreviewResource(r)}
+                          className="p-1 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-md transition"
+                          title="Preview"
+                        >
+                          <FileText size={12} />
+                        </button>
                         <StatusBadge status={r.isApproved ? 'approved' : 'under-review'} />
                       </div>
                     </div>
@@ -510,6 +519,15 @@ export default function LecturerDashboard() {
           </div>
         )}
       </div>
+
+      {previewResource && (
+        <DocumentPreview
+          resourceId={previewResource.id}
+          title={previewResource.title}
+          fileType={previewResource.fileType}
+          onClose={() => setPreviewResource(null)}
+        />
+      )}
     </div>
   );
 }

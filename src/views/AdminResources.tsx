@@ -2,12 +2,13 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Search, Eye, CheckCircle, XCircle, Trash2, ChevronLeft, ChevronRight,
-  X, Plus, Loader2, AlertCircle, RefreshCw
+  X, Plus, Loader2, AlertCircle, RefreshCw, FileText
 } from 'lucide-react';
 import { useApp } from '../context';
 import { RESOURCE_TYPE_LABELS } from '../data';
 import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { extractApiError, type Resource as ApiResource } from '../services/api';
+import DocumentPreview from '../components/DocumentPreview';
 import type { ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -74,6 +75,7 @@ export default function AdminResources() {
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [page, setPage] = useState(1);
+  const [previewResource, setPreviewResource] = useState<AdaptedResource | null>(null);
   const PAGE_SIZE = 8;
 
   // ------------------------------------------------------------
@@ -476,6 +478,13 @@ export default function AdminResources() {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
                         <button
+                          onClick={() => setPreviewResource(r)}
+                          title="Preview"
+                          className="p-1.5 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-lg transition"
+                        >
+                          <FileText size={13} />
+                        </button>
+                        <button
                           onClick={() => navigate('resource-detail', { id: r.id })}
                           title="View"
                           className="p-1.5 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-lg transition"
@@ -567,6 +576,15 @@ export default function AdminResources() {
           </div>
         )}
       </div>
+
+      {previewResource && (
+        <DocumentPreview
+          resourceId={previewResource.id}
+          title={previewResource.title}
+          fileType={previewResource.fileType}
+          onClose={() => setPreviewResource(null)}
+        />
+      )}
     </div>
   );
 }

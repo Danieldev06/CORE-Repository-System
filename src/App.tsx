@@ -9,6 +9,7 @@ import SubmitWork from './views/SubmitWork';
 import MySubmissions from './views/MySubmissions';
 import LecturerDashboard from './views/LecturerDashboard';
 import LecturerResources from './views/LecturerResources';
+import LecturerModules from './views/LecturerModules';
 import UploadResource from './views/UploadResource';
 import ReviewSubmissions from './views/ReviewSubmissions';
 import AdminDashboard from './views/AdminDashboard';
@@ -48,6 +49,7 @@ function AppRouter() {
       case 'download-history': return <DownloadHistory />;
       case 'lecturer-dashboard': return <LecturerDashboard />;
       case 'lecturer-resources': return <LecturerResources />;
+      case 'lecturer-modules': return <LecturerModules />;
       case 'upload-resource': return <UploadResource />;
       case 'review-submissions': return <ReviewSubmissions />;
       case 'review-submission-detail': return <ReviewSubmissions />;

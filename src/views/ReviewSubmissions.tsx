@@ -4,6 +4,7 @@ import { useApp } from '../context';
 import { PageHeader, StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { extractApiError, type Resource as ApiResource } from '../services/api';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Submission, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -97,6 +98,7 @@ function ReviewDetail({
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState('');
+  const [showPreview, setShowPreview] = useState(false);
 
   const handleDownload = async () => {
     try {
@@ -206,12 +208,21 @@ function ReviewDetail({
                   {submission.title}
                 </div>
                 <div className="text-navy-400 text-xs mt-1">{submission.fileType}</div>
-                <button
-                  onClick={handleDownload}
-                  className="mt-3 inline-flex items-center gap-1 text-xs text-navy-700 font-semibold underline hover:text-navy-900 transition"
-                >
-                  <Download size={11} /> Download to review
-                </button>
+
+                <div className="mt-4 flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => setShowPreview(true)}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
+                  >
+                    <Eye size={12} /> Preview Document
+                  </button>
+                  <button
+                    onClick={handleDownload}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-white border border-navy-200 hover:bg-navy-50 text-navy-700 text-xs font-semibold rounded-lg transition"
+                  >
+                    <Download size={12} /> Download
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -367,6 +378,15 @@ function ReviewDetail({
           </div>
         </div>
       </div>
+
+      {showPreview && (
+        <DocumentPreview
+          resourceId={submission.id}
+          title={submission.title}
+          fileType={submission.fileType}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }

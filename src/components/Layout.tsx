@@ -10,7 +10,7 @@ import {
 
 interface NavItem {
   label: string;
-  icon: React.ReactNode;
+  icon?: React.ReactNode;
   view: ViewType;
   dividerBefore?: boolean;
 }
@@ -30,6 +30,7 @@ function getNavItems(role: string): NavItem[] {
     { label: 'Dashboard', icon: <LayoutDashboard size={16} />, view: 'lecturer-dashboard' },
     { label: 'Repository', icon: <BookOpen size={16} />, view: 'repository' },
     { label: 'My Resources', icon: <FileText size={16} />, view: 'lecturer-resources', dividerBefore: true },
+    { label: 'My Modules', icon: <GraduationCap size={16} />, view: 'lecturer-modules' },
     { label: 'Upload Resource', icon: <Upload size={16} />, view: 'upload-resource' },
     { label: 'Review Submissions', icon: <ClipboardCheck size={16} />, view: 'review-submissions' },
     { label: 'Notifications', icon: <Bell size={16} />, view: 'notifications', dividerBefore: true },
@@ -120,9 +121,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   active
                     ? 'bg-white text-navy-900 shadow-sm'
                     : 'text-white/65 hover:bg-white/8 hover:text-white'
-                }`}
+                } ${!item.icon ? 'pl-3' : ''}`}
               >
-                <span className={active ? 'text-navy-700' : 'text-white/50'}>{item.icon}</span>
+                {item.icon && (
+                  <span className={active ? 'text-navy-700' : 'text-white/50'}>{item.icon}</span>
+                )}
                 <span className="flex-1">{item.label}</span>
                 {item.view === 'notifications' && unreadCount > 0 && (
                   <span className="bg-blue-500 text-white text-[9px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">

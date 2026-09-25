@@ -6,6 +6,7 @@ import { PageHeader, ResourceTypeBadge } from '../components/Layout';
 import { api, extractApiError } from '../services/api';
 import { adaptResources } from '../utils/adapters';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Resource } from '../types';
 
 export default function DownloadHistory() {
@@ -13,6 +14,7 @@ export default function DownloadHistory() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [previewResource, setPreviewResource] = useState<Resource | null>(null);
 
   const fetchResources = useCallback(async () => {
     try {
@@ -120,7 +122,7 @@ export default function DownloadHistory() {
         ) : (
           <div className="bg-white rounded-xl border border-navy-100 overflow-hidden shadow-sm">
             <div className="bg-navy-50 border-b border-navy-100 px-4 py-3 grid grid-cols-12 gap-4">
-              <div className="col-span-7 text-xs font-semibold text-navy-600 uppercase tracking-wide">
+              <div className="col-span-6 text-xs font-semibold text-navy-600 uppercase tracking-wide">
                 Resource
               </div>
               <div className="col-span-2 text-xs font-semibold text-navy-600 uppercase tracking-wide hidden md:block">
@@ -129,8 +131,8 @@ export default function DownloadHistory() {
               <div className="col-span-2 text-xs font-semibold text-navy-600 uppercase tracking-wide hidden sm:block">
                 File
               </div>
-              <div className="col-span-1 text-xs font-semibold text-navy-600 uppercase tracking-wide">
-                Action
+              <div className="col-span-2 text-xs font-semibold text-navy-600 uppercase tracking-wide text-right">
+                Actions
               </div>
             </div>
             {downloaded.map((r, i) => (
@@ -140,7 +142,7 @@ export default function DownloadHistory() {
                   i < downloaded.length - 1 ? 'border-b border-navy-50' : ''
                 }`}
               >
-                <div className="col-span-7 min-w-0 flex items-center gap-3">
+                <div className="col-span-6 min-w-0 flex items-center gap-3">
                   <div className="w-8 h-10 bg-navy-50 border border-navy-100 rounded flex items-center justify-center shrink-0">
                     <FileText size={14} className="text-navy-400" />
                   </div>
@@ -163,7 +165,14 @@ export default function DownloadHistory() {
                 <div className="col-span-2 text-xs text-navy-500 hidden sm:block">
                   {r.fileType}
                 </div>
-                <div className="col-span-1">
+                <div className="col-span-2 flex items-center justify-end gap-1">
+                  <button
+                    onClick={() => setPreviewResource(r)}
+                    className="p-2 text-navy-500 hover:text-navy-800 hover:bg-navy-100 rounded-lg transition"
+                    title="Preview"
+                  >
+                    <FileText size={14} />
+                  </button>
                   <button
                     onClick={() => handleDownload(r)}
                     className="p-2 text-navy-600 hover:text-navy-800 hover:bg-navy-100 rounded-lg transition"
@@ -177,6 +186,15 @@ export default function DownloadHistory() {
           </div>
         )}
       </div>
+
+      {previewResource && (
+        <DocumentPreview
+          resourceId={previewResource.id}
+          title={previewResource.title}
+          fileType={previewResource.fileType}
+          onClose={() => setPreviewResource(null)}
+        />
+      )}
     </div>
   );
 }

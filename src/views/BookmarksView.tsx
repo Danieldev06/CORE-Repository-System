@@ -1,11 +1,12 @@
 // src/views/BookmarksView.tsx
 import { useState, useEffect, useCallback } from 'react';
-import { Bookmark, BookmarkCheck, Download, Loader2, AlertCircle } from 'lucide-react';
+import { Bookmark, BookmarkCheck, Download, Loader2, AlertCircle, FileText } from 'lucide-react';
 import { useApp } from '../context';
 import { PageHeader, ResourceTypeBadge } from '../components/Layout';
 import { api, extractApiError } from '../services/api';
 import { adaptResources } from '../utils/adapters';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Resource } from '../types';
 
 export default function BookmarksView() {
@@ -13,6 +14,7 @@ export default function BookmarksView() {
   const [resources, setResources] = useState<Resource[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [previewResource, setPreviewResource] = useState<Resource | null>(null);
 
   const fetchResources = useCallback(async () => {
     try {
@@ -142,6 +144,13 @@ export default function BookmarksView() {
                 <ResourceTypeBadge type={r.type} />
                 <div className="flex items-center gap-2 shrink-0">
                   <button
+                    onClick={() => setPreviewResource(r)}
+                    className="p-1.5 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-lg transition"
+                    title="Preview"
+                  >
+                    <FileText size={15} />
+                  </button>
+                  <button
                     onClick={() => toggleBookmark(r.id)}
                     className="p-1.5 text-navy-600 hover:text-red-500 hover:bg-red-50 rounded-lg transition"
                     title="Remove bookmark"
@@ -160,6 +169,15 @@ export default function BookmarksView() {
           </div>
         )}
       </div>
+
+      {previewResource && (
+        <DocumentPreview
+          resourceId={previewResource.id}
+          title={previewResource.title}
+          fileType={previewResource.fileType}
+          onClose={() => setPreviewResource(null)}
+        />
+      )}
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { StatusBadge, ResourceTypeBadge } from '../components/Layout';
 import { api, resourceApi, extractApiError, type Resource as ApiResource } from '../services/api';
 import { adaptResources } from '../utils/adapters';
 import { downloadResourceWithAuth } from '../utils/fileUrl';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Resource, Submission, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -88,6 +89,7 @@ function StatsCard({
 function ResourceCard({ resource, onDownload }: { resource: Resource; onDownload: (r: Resource) => void }) {
   const { navigate, bookmarkedIds, toggleBookmark } = useApp();
   const bookmarked = bookmarkedIds.includes(resource.id);
+  const [showPreview, setShowPreview] = useState(false);
 
   const typeColors: Record<string, string> = {
     'lecture-notes': 'from-navy-700 to-navy-900',
@@ -135,14 +137,32 @@ function ResourceCard({ resource, onDownload }: { resource: Resource; onDownload
             <Download size={10} className="shrink-0" />
             {resource.downloads}
           </div>
-          <button
-            onClick={() => onDownload(resource)}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
-          >
-            <Download size={11} /> Download
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setShowPreview(true)}
+              className="p-1.5 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-lg transition"
+              title="Preview"
+            >
+              <FileText size={13} />
+            </button>
+            <button
+              onClick={() => onDownload(resource)}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-navy-800 hover:bg-navy-700 text-white text-xs font-semibold rounded-lg transition"
+            >
+              <Download size={11} /> Download
+            </button>
+          </div>
         </div>
       </div>
+
+      {showPreview && (
+        <DocumentPreview
+          resourceId={resource.id}
+          title={resource.title}
+          fileType={resource.fileType}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
     </div>
   );
 }

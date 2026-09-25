@@ -3,6 +3,7 @@ import { Plus, Download, Eye, Edit2, Trash2, TrendingUp, FileText, RefreshCw, Al
 import { useApp } from '../context';
 import { PageHeader, ResourceTypeBadge, StatusBadge } from '../components/Layout';
 import { resourceApi, extractApiError, type Resource as ApiResource } from '../services/api';
+import DocumentPreview from '../components/DocumentPreview';
 import type { Resource as FrontendResource, ResourceType, ResourceStatus } from '../types';
 
 // ============================================================
@@ -53,6 +54,7 @@ export default function LecturerResources() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [refreshing, setRefreshing] = useState(false);
+  const [previewResource, setPreviewResource] = useState<FrontendResource | null>(null);
 
   const fetchResources = useCallback(
     async (showRefreshToast = false) => {
@@ -215,6 +217,13 @@ export default function LecturerResources() {
                     <td className="px-4 py-3.5">
                       <div className="flex items-center gap-1">
                         <button
+                          onClick={() => setPreviewResource(r)}
+                          className="p-1.5 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-lg transition"
+                          title="Preview"
+                        >
+                          <FileText size={13} />
+                        </button>
+                        <button
                           onClick={() => navigate('resource-detail', { id: r.id })}
                           className="p-1.5 text-navy-400 hover:text-navy-700 hover:bg-navy-100 rounded-lg transition"
                           title="View"
@@ -251,6 +260,15 @@ export default function LecturerResources() {
           </div>
         )}
       </div>
+
+      {previewResource && (
+        <DocumentPreview
+          resourceId={previewResource.id}
+          title={previewResource.title}
+          fileType={previewResource.fileType}
+          onClose={() => setPreviewResource(null)}
+        />
+      )}
     </div>
   );
 }
